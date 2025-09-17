@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Kanban — Arrasta, Solta & Reordena</title>
+<style>
+  :root{
+    --bg:#f5f1e6;       /* fundo bege */
+    --card:#fff8f0;     /* cards claros */
+    --muted:#475569;
+    --gap:16px;
+    --accent1: #7c3aed;
+    --accent2: #06b6d4;
+    --accent3: #f97316;
+    --accent4: #10b981;
+    --todo-bg:#fff3f0;
+    --doing-bg:#f0fff8;
+    --done-bg:#f0f5ff;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    background: var(--bg);
+    color:#0f172a;
+    min-height:100vh;
+    padding:22px;
+    display:flex;
+    flex-direction:column;
+    gap:18px;
+  }
+
+  /* HEADER CENTRALIZADO */
+  header{
+    display:flex;
+    flex-direction:column; /* título em cima, controles embaixo */
+    align-items:center;    /* centraliza horizontalmente */
+    gap:12px;
+    max-width:1200px;
+    margin:0 auto;
+    width:100%;
+  }
+  h1{
+    margin:0;
+    font-size:28px;
+    text-align:center;
+  }
+  .controls{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+    justify-content:center;
+  }
+  .controls select, .controls input, .controls button{
+    padding:8px 10px;
+    border-radius:10px;
+    border:1px solid rgba(15,23,42,0.06);
+    background:#fff;
+    font-size:14px;
+    box-shadow: 0 1px 2px rgba(2,6,23,0.04);
+  }
+  .controls button{cursor:pointer;background:linear-gradient(90deg,var(--accent2),var(--accent1));color:#fff;border:none}
+
+  /* BOARD */
+  .board{
+    display:grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap:var(--gap);
+    max-width:1200px;
+    margin:0 auto;
+    width:100%;
+    align-items:start;
+  }
+  @media (max-width:900px){ .board{grid-template-columns:1fr; padding-bottom:40px} }
+
+  .column{
+    border-radius:14px;
+    padding:12px;
+    min-height:320px;
+    box-shadow:0 10px 30px rgba(2,6,23,0.04);
+    display:flex;
+    flex-direction:column;
+    gap:12px;
+    position:relative;
+    overflow:hidden;
+  }
+  .column[data-col="todo"]{ background: var(--todo-bg); }
+  .column[data-col="doing"]{ background: var(--doing-bg); }
+  .column[data-col="done"]{ background: var(--done-bg); }
+
+  .col-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:8px;
+  }
+  .col-title{font-weight:700;color:#071133;display:flex;gap:10px;align-items:center}
+  .col-count{font-size:13px;color:var(--muted)}
+
+  .drop-hint{
+    position:absolute;
+    inset:12px;
+    border-radius:10px;
+    pointer-events:none;
+    transition:opacity .18s ease;
+    opacity:0;
+    border:2px dashed rgba(14,165,164,0.10);
+  }
+  .column.drag-over .drop-hint{opacity:1}
+
+  .list{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+    padding-top:6px;
+    overflow:auto;
+    max-height:56vh;
+  }
+
+  .card{
+    background: linear-gradient(180deg, var(--card), #ffffff);
+    border-radius:12px;
+    padding:12px 14px;
+    box-shadow:0 6px 18px rgba(2,6,23,0.06);
+    cursor:grab;
+    user-select:none;
+    transition:transform .18s cubic-bezier(.2,.9,.2,1), box-shadow .18s;
+    min-height:52px;
+    display:flex;
+    align-items:center;
+    gap:12px;
+    border-left:6px solid transparent;
+  }
+  .card.dragging{
+    opacity:.6;
+    transform:scale(.99) rotate(-0.3deg);
+    box-shadow:0 18px 40px rgba(2,6,23,0.12);
+    cursor:grabbing;
+  }
+
+  .list .card:nth-child(3n+1){ border-left-color: #7c3aed44; }
+  .list .card:nth-child(3n+2){ border-left-color: #06b6d444; }
+  .list .card:nth-child(3n+3){ border-left-color: #f9731644; }
+
+  .card .label{flex:1;font-weight:700;color:#071133}
+  .card .meta{font-size:12px;color:var(--muted);white-space:nowrap}
+  .hint{font-size:13px;color:var(--muted);text-align:center;padding:8px 6px;}
+
+  footer{
+    max-width:1200px;
+    margin:0 auto;
+    width:100%;
+    text-align:center;
+    color:var(--muted);
+    font-size:13px;
+  }
+
+  .col-actions{display:flex;gap:6px;align-items:center}
+  .small {
+    border-radius:8px;padding:6px 8px;background:transparent;border:1px solid #eef2f5;font-size:13px;color:var(--muted);cursor:pointer;
+  }
+  .small.primary{background:linear-gradient(90deg,var(--accent2),var(--accent1));color:#fff;border:none}
+
+  .card.drop-animate { animation: dropBounce .45s cubic-bezier(.2,.8,.2,1); }
+  @keyframes dropBounce { 0%{transform: translateY(-8px) scale(.98);} 60%{transform: translateY(8px) scale(1.02);} 100%{transform: translateY(0) scale(1);} }
+  .card.active { transform: scale(1.02); box-shadow:0 14px 40px rgba(2,6,23,0.10); }
+  .insert-marker { height:10px; border-radius:6px; background: linear-gradient(90deg, rgba(124,58,237,0.15), rgba(6,182,212,0.15)); margin:6px 0; }
+
+  @media (max-width:768px){ body{padding:12px} .controls{flex-wrap:wrap} .list{ max-height:45vh } }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kanban</h1>
+  <div class="controls" aria-hidden>
+    <select id="defaultCol" title="Adicionar em">
+      <option value="todo">To Do</option>
+      <option value="doing">Doing</option>
+      <option value="done">Done</option>
+    </select>
+    <input id="newCardText" placeholder="Nova tarefa..." />
+    <button id="addBtn">Add</button>
+    <button id="clearBtn" class="small" title="Limpar board">Limpar</button>
+  </div>
+</header>
+
+<main class="board" id="board">
+  <section class="column" data-col="todo">
+    <div class="col-head">
+      <div>
+        <div class="col-title">To Do</div>
+        <div class="col-count" data-count>0</div>
+      </div>
+      <div class="col-actions">
+        <button class="small" data-add>+ task</button>
+      </div>
+    </div>
+    <div class="drop-hint"></div>
+    <div class="list" data-list></div>
+    <div class="hint">Arraste tarefas aqui</div>
+  </section>
+
+  <section class="column" data-col="doing">
+    <div class="col-head">
+      <div>
+        <div class="col-title">Doing</div>
+        <div class="col-count" data-count>0</div>
+      </div>
+      <div class="col-actions">
+        <button class="small" data-add>+ task</button>
+      </div>
+    </div>
+    <div class="drop-hint"></div>
+    <div class="list" data-list></div>
+    <div class="hint">Em progresso</div>
+  </section>
+
+  <section class="column" data-col="done">
+    <div class="col-head">
+      <div>
+        <div class="col-title">Done</div>
+        <div class="col-count" data-count>0</div>
+      </div>
+      <div class="col-actions">
+        <button class="small" data-add>+ task</button>
+      </div>
+    </div>
+    <div class="drop-hint"></div>
+    <div class="list" data-list></div>
+    <div class="hint">Concluídas</div>
+  </section>
+</main>
+
+<footer>
+  Duplo clique em um card para apagar. Arraste pra reordenar dentro da coluna ou mover pra outra. Tudo salvo no navegador.
+</footer>
+
+<script>
+(() => {
+  const board = document.getElementById('board');
+  const addBtn = document.getElementById('addBtn');
+  const newCardText = document.getElementById('newCardText');
+  const defaultCol = document.getElementById('defaultCol');
+  const clearBtn = document.getElementById('clearBtn');
+  const STORE_KEY = 'kanban-color-v2';
+  const defaultState = {
+    todo: [ { id: id(), text: 'Planejar sprint' }, { id: id(), text: 'Escrever requisitos' } ],
+    doing: [ { id: id(), text: 'Desenhar wireframe' } ],
+    done: [ { id: id(), text: 'Setup repositório' } ]
+  };
+  let state = loadState() || defaultState;
+  render();
+
+  addBtn.addEventListener('click', () => {
+    const text = newCardText.value.trim();
+    if (!text) return flashInput();
+    const col = defaultCol.value;
+    state[col].push({ id: id(), text });
+    newCardText.value = '';
+    saveState(); render();
+    requestAnimationFrame(()=> {
+      const colEl = board.querySelector(`[data-col="${col}"] .list`);
+      colEl.scrollTop = colEl.scrollHeight;
+    });
+  });
+
+  board.querySelectorAll('[data-add]').forEach(btn=>{
+    btn.addEventListener('click', (e) => {
+      const col = e.target.closest('.column').dataset.col;
+      defaultCol.value = col;
+      newCardText.focus();
+    });
+  });
+
+  clearBtn.addEventListener('click', ()=>{
+    if (!confirm('Limpar todas as tarefas?')) return;
+    state = { todo: [], doing: [], done: [] };
+    saveState(); render();
+  });
+
+  newCardText.addEventListener('keydown', (e)=> { if (e.key === 'Enter') addBtn.click(); });
+
+  let draggingId = null;
+  let draggingFromCol = null;
+
+  function createCardEl(item) {
+    const a = document.createElement('div');
+    a.className = 'card';
+    a.setAttribute('draggable', 'true');
+    a.dataset.id = item.id;
+    a.innerHTML = `<div class="label">${escapeHtml(item.text)}</div><div class="meta">#${item.id.slice(-4)}</div>`;
+
+    a.addEventListener('dragstart', (e) => {
+      draggingId = item.id;
+      draggingFromCol = a.closest('.column')?.dataset?.col || null;
+      a.classList.add('dragging');
+      try { e.dataTransfer.setData('text/plain', item.id); } catch {}
+      e.dataTransfer.effectAllowed = 'move';
+      setTimeout(()=> a.style.opacity = '0.6', 0);
+    });
+
+    a.addEventListener('dragend', () => {
+      a.classList.remove('dragging');
+      a.style.opacity = '';
+      draggingId = null; draggingFromCol = null;
+    });
+
+    a.addEventListener('dblclick', () => {
+      if (!confirm('Deletar essa tarefa?')) return;
+      removeItemById(item.id);
+      saveState(); render();
+    });
+
+    return a;
+  }
+
+  board.querySelectorAll('.column').forEach(col => {
+    const list = col.querySelector('.list');
+
+    col.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      col.classList.add('drag-over');
+
+      const children = Array.from(list.querySelectorAll('.card:not(.dragging)'));
+      let insertBeforeNode = null;
+      for (const ch of children) {
+        const rect = ch.getBoundingClientRect();
+        if (e.clientY < rect.top + rect.height / 2) { insertBeforeNode = ch; break; }
+      }
+
+      list.querySelectorAll('.insert-marker').forEach(m => m.remove());
+      const marker = document.createElement('div');
+      marker.className = 'insert-marker';
+      if (insertBeforeNode) list.insertBefore(marker, insertBeforeNode);
+      else list.appendChild(marker);
+    });
+
+    col.addEventListener('dragleave', (e) => {
+      if (!col.contains(e.relatedTarget)) {
+        col.classList.remove('drag-over');
+        list.querySelectorAll('.insert-marker').forEach(m => m.remove());
+      }
+    });
+
+    col.addEventListener('drop', (e) => {
+      e.preventDefault();
+      col.classList.remove('drag-over');
+      const idDropped = (e.dataTransfer && e.dataTransfer.getData) ? e.dataTransfer.getData('text/plain') : null;
+      const idToMove = idDropped || draggingId;
+      if (!idToMove) return;
+
+      const markers = Array.from(list.querySelectorAll('.insert-marker'));
+      let index = 0;
+      if (markers.length) {
+        const marker = markers[0];
+        index = Array.from(list.children).indexOf(marker);
+      } else { index = list.children.length; }
+
+      list.querySelectorAll('.insert-marker').forEach(m => m.remove());
+      const targetCol = col.dataset.col;
+      moveItemToColumnAtIndex(idToMove, targetCol, index);
+      saveState(); render();
+
+      requestAnimationFrame(()=> {
+        const moved = col.querySelector(`[data-id="${idToMove}"]`);
+        if (moved) {
+          moved.classList.add('drop-animate');
+          setTimeout(()=> moved.classList.remove('drop-animate'), 650);
+        }
+      });
+    });
+  });
+
+  function render(){
+    ['todo','doing','done'].forEach(colName => {
+      const col = board.querySelector(`[data-col="${colName}"]`);
+      const list = col.querySelector('.list');
+      list.innerHTML = '';
+      state[colName].forEach(item => list.appendChild(createCardEl(item)));
+      col.querySelector('[data-count]').textContent = state[colName].length + (state[colName].length === 1 ? ' task' : ' tasks');
+    });
+    board.querySelectorAll('.list').forEach(list=>{ list.removeEventListener('scroll', onListScroll); list.addEventListener('scroll', onListScroll); });
+    updateActiveVisuals();
+  }
+
+  function onListScroll(e){ throttle(updateActiveVisuals, 90)(); }
+  function moveItemToColumnAtIndex(id, targetCol, index){
+    let item = null;
+    for (const c of ['todo','doing','done']){
+      const idx = state[c].findIndex(x => x.id === id);
+      if (idx >= 0) { item = state[c].splice(idx,1)[0]; break; }
+    }
+    if (!item) return;
+    const targetArr = state[targetCol];
+    const idxClamped = Math.max(0, Math.min(index, targetArr.length));
+    targetArr.splice(idxClamped, 0, item);
+  }
+  function removeItemById(id){
+    for (const c of ['todo','doing','done']){
+      const idx = state[c].findIndex(x => x.id === id);
+      if (idx >= 0) { state[c].splice(idx,1); return; }
+    }
+  }
+  function saveState(){ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  function loadState(){ try { const raw = localStorage.getItem(STORE_KEY); if (!raw) return null; const parsed = JSON.parse(raw); if (parsed.todo && parsed.doing && parsed.done) return parsed; } catch {} return null; }
+  function id(){ return Math.random().toString(36).slice(2,10); }
+  function escapeHtml(s){ return String(s).replace(/[&<>"']/g, (m)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[m])); }
+  function flashInput(){ newCardText.style.transition = 'box-shadow .18s'; newCardText.style.boxShadow = '0 0 0 6px rgba(99,102,241,0.12)'; setTimeout(()=> newCardText.style.boxShadow = '', 420); }
+  function updateActiveVisuals(){
+    document.querySelectorAll('.column').forEach(col=>{
+      const list = col.querySelector('.list');
+      const cards = Array.from(list.querySelectorAll('.card'));
+      if (!cards.length) return;
+      const center = list.scrollTop + list.clientHeight/2;
+      let closest=null, dist=Infinity;
+      cards.forEach(card=>{
+        const relCenter = card.offsetTop + card.offsetHeight/2;
+        const d = Math.abs(center - relCenter);
+        if (d < dist){ dist = d; closest = card; }
+      });
+      cards.forEach(c=> c.classList.remove('active'));
+      if (closest) closest.classList.add('active');
+    });
+  }
+  function throttle(fn, wait){ let last=0; return function(...args){ const now = Date.now(); if (now - last >= wait){ last = now; fn.apply(this,args); last=now; } } }
+})();
+</script>
+
+</body>
+</html>
+
