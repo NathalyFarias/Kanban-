@@ -1,8 +1,8 @@
 📂 Estrutura do Projeto - Kanban 
 
-📁 Organização: Cada desafio está em uma pasta própria, com nomes padronizados.
+📁 Organização: Código estruturado. 
 
-🖥 Tecnologias: Dentro de cada pasta você encontra as implementações em HTML.
+🖥 Tecnologia: Dentro da pasta você encontra a implementação em HTML. 
 
-✅ Status: Todos os desafios estão finalizados e prontos para consulta.
+✅ Status: Desafio finalizado e pronto para consulta. 
 
